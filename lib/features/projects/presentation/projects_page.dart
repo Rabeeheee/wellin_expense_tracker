@@ -8,6 +8,7 @@ import '../../../shared/models/enums.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/design/filter_chips_row.dart';
 import '../../../shared/widgets/design/premium_card.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../bloc/projects_cubit.dart';
@@ -69,7 +70,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 child: Builder(
                   builder: (context) {
                     if (state.loading && state.items.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const AppLoader.page();
                     }
                     final visible = state.filteredItems;
                     if (visible.isEmpty) {

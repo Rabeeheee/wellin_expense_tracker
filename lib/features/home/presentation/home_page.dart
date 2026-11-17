@@ -12,6 +12,7 @@ import '../../../shared/models/period_scope.dart';
 import '../../../shared/models/transaction_item.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/amount_text.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/counting_money_text.dart';
 import '../../../shared/widgets/design/metric_tile.dart';
 import '../../../shared/widgets/design/premium_card.dart';
@@ -49,7 +50,7 @@ class _HomePageState extends State<HomePage> {
         child: BlocBuilder<TransactionsCubit, TransactionsState>(
           builder: (context, state) {
             if (state.loading && state.items.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+              return const AppLoader.page();
             }
 
             final recent = state.items.take(5).toList();

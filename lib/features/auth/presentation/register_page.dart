@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
 import '../../../shared/models/enums.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../bloc/auth_bloc.dart';
 
@@ -151,13 +152,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                   );
                             },
                       child: loading
-                          ? SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.fabIcon,
-                              ),
+                          ? AppLoader.inline(
+                              size: 22,
+                              color: AppColors.fabIcon,
                             )
                           : const Text('Create account'),
                     ),

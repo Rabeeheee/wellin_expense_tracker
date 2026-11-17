@@ -5,11 +5,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
 import '../../../shared/models/enums.dart';
-import '../../../shared/models/period_scope.dart';
 import '../../../shared/models/transaction_item.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/counting_money_text.dart';
-import '../../../shared/widgets/design/circle_icon_button.dart';
 import '../../../shared/widgets/design/filter_chips_row.dart';
 import '../../../shared/widgets/design/premium_card.dart';
 import '../../../shared/widgets/design/premium_select_field.dart';
@@ -95,7 +94,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           listener: (context, state) => _loadExtras(),
           builder: (context, state) {
             if (state.loading && state.items.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+              return const AppLoader.page();
             }
 
             final filtered = _filterItems(state.items, state.projectFilter);
@@ -126,39 +125,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               child: ListView(
                 padding: EdgeInsets.fromLTRB(20, 8, 20, 120),
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Analytics',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      CircleIconButton(
-                        icon: Icons.calendar_today_outlined,
-                        onPressed: () async {
-                          final cubit = context.read<TransactionsCubit>();
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: cubit.state.selectedDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2100),
-                          );
-                          if (picked != null && context.mounted) {
-                            await cubit.setScope(PeriodScope.day);
-                            await cubit.setDate(
-                              picked.year,
-                              picked.month,
-                              picked.day,
-                            );
-                          }
-                        },
-                      ),
-                    ],
+                  Text(
+                    'Analytics',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   FilterChipsRow(
@@ -331,7 +304,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       height: 180,
                       child: _trendLoading &&
                               trendBars.every((e) => e.$2 == 0)
-                          ? const Center(child: CircularProgressIndicator())
+                          ? const AppLoader.page()
                           : _TrendBars(bars: trendBars),
                     ),
                   ),

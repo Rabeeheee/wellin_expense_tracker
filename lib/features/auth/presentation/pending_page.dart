@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
+import '../../../shared/widgets/claim_super_admin_tile.dart';
 import '../../../shared/widgets/design/app_confirm_dialog.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../bloc/auth_bloc.dart';
@@ -47,6 +48,10 @@ class PendingPage extends StatelessWidget {
                 style: TextStyle(color: AppColors.textSecondary),
               ),
               const Spacer(),
+              if (profile?.status.name != 'disabled') ...[
+                const ClaimSuperAdminTile(compact: true),
+                const SizedBox(height: 12),
+              ],
               OutlinedButton(
                 onPressed: () =>
                     context.read<AuthBloc>().add(const AuthRefreshProfile()),

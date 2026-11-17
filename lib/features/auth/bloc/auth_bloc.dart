@@ -286,13 +286,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     try {
       final profile = await _authRepository.fetchMyProfile();
       if (profile == null) return;
-      if (state.status == AuthStatus.authenticated ||
+
+      if (profile.status == UserStatus.pending ||
+          profile.status == UserStatus.disabled) {
+        emit(AuthBlocState.pending(profile));
+        return;
+      }
+
+      // Keep an existing in-app session (including pending → claimed super admin).
+      if (state.status == AuthStatus.pending ||
+          state.status == AuthStatus.authenticated ||
           state.status == AuthStatus.locked) {
-        emit(
-          state.status == AuthStatus.locked
-              ? AuthBlocState.locked(profile)
-              : AuthBlocState.authenticated(profile, unlocked: true),
-        );
+        _unlockedForSession = true;
+        emit(AuthBlocState.authenticated(profile, unlocked: true));
       }
     } catch (_) {}
   }

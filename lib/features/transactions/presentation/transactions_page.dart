@@ -15,6 +15,7 @@ import '../../../shared/models/transaction_item.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/transactions_export.dart';
 import '../../../shared/widgets/amount_text.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/design/app_confirm_dialog.dart';
 import '../../../shared/widgets/design/filter_chips_row.dart';
 import '../../../shared/widgets/design/premium_card.dart';
@@ -335,14 +336,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                             ? null
                             : () => _exportCsv(visible, state.periodLabel),
                         icon: _exporting
-                            ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.textPrimary,
-                                ),
-                              )
+                            ? const AppLoader.inline(size: 18)
                             : Icon(
                                 Icons.ios_share_rounded,
                                 color: AppColors.textPrimary,
@@ -477,9 +471,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                   child: Builder(
                     builder: (context) {
                       if (state.loading && state.items.isEmpty) {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
+                        return const AppLoader.page();
                       }
 
                       if (_byUser && !drilling) {

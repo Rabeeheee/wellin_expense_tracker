@@ -14,6 +14,7 @@ import '../../../shared/widgets/design/filter_chips_row.dart';
 import '../../../shared/widgets/design/metric_tile.dart';
 import '../../../shared/widgets/design/premium_card.dart';
 import '../../../shared/widgets/design/txn_icon.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/month_year_filter.dart';
 import '../../../shared/widgets/wellin_logo.dart';
@@ -108,7 +109,7 @@ class _EmployeeExpensesPageState extends State<EmployeeExpensesPage> {
       body: BlocBuilder<TransactionsCubit, TransactionsState>(
         builder: (context, state) {
           if (state.loading && state.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoader.page();
           }
 
           final allEmployee =

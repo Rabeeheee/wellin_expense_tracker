@@ -7,6 +7,8 @@ import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
 import '../../../core/theme_cubit.dart';
 import '../../../core/theme_reveal.dart';
+import '../../../shared/widgets/app_loader.dart';
+import '../../../shared/widgets/claim_super_admin_tile.dart';
 import '../../../shared/widgets/design/app_confirm_dialog.dart';
 import '../../../shared/widgets/design/premium_card.dart';
 import '../../../shared/widgets/profile_avatar.dart';
@@ -93,7 +95,7 @@ class _MorePageState extends State<MorePage> {
                         const SizedBox(
                           width: 64,
                           height: 64,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: Center(child: AppLoader.inline(size: 28)),
                         ),
                     ],
                   ),
@@ -202,6 +204,9 @@ class _MorePageState extends State<MorePage> {
                 subtitle: 'Approve And Assign Roles',
                 onTap: () => context.push('/users'),
               ),
+            ] else ...[
+              const SizedBox(height: 10),
+              const ClaimSuperAdminTile(),
             ],
             const SizedBox(height: 24),
             PremiumCard(

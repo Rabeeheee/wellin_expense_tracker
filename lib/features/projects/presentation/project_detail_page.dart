@@ -10,6 +10,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/amount_text.dart';
 import '../../../shared/widgets/design/premium_card.dart';
 import '../../../shared/widgets/design/txn_icon.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../../auth/bloc/auth_bloc.dart';
@@ -88,7 +89,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoader.page()
           : _error != null
               ? Center(child: Text(_error!))
               : project == null

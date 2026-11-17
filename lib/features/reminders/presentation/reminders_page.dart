@@ -9,6 +9,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/design/app_confirm_dialog.dart';
 import '../../../shared/widgets/design/premium_card.dart';
 import '../../../shared/widgets/design/premium_select_field.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../../auth/bloc/auth_bloc.dart';
@@ -282,7 +283,7 @@ class _RemindersPageState extends State<RemindersPage>
       body: BlocBuilder<RemindersCubit, RemindersState>(
         builder: (context, state) {
           if (state.loading && state.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoader.page();
           }
 
           final profile = context.watch<AuthBloc>().state.profile;

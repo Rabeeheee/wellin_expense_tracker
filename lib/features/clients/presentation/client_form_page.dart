@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
 import '../../../shared/models/client_item.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/design/app_confirm_dialog.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../../auth/bloc/auth_bloc.dart';
@@ -187,11 +188,7 @@ class _ClientFormPageState extends State<ClientFormPage> {
             ElevatedButton(
               onPressed: _saving ? null : _save,
               child: _saving
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const AppLoader.inline(size: 22)
                   : Text(isEdit ? 'Update' : 'Save'),
             ),
           ],

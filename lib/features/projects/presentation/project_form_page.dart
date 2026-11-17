@@ -9,6 +9,7 @@ import '../../../core/theme_rebuild_scope.dart';
 import '../../../shared/models/enums.dart';
 import '../../../shared/models/project_item.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/design/app_confirm_dialog.dart';
 import '../../../shared/widgets/design/premium_select_field.dart';
 import '../../../shared/widgets/wellin_logo.dart';
@@ -351,11 +352,7 @@ class _ProjectFormPageState extends State<ProjectFormPage> {
             ElevatedButton(
               onPressed: _saving || clients.isEmpty ? null : _save,
               child: _saving
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const AppLoader.inline(size: 22)
                   : Text(isEdit ? 'Update' : 'Save'),
             ),
           ],

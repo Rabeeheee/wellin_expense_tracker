@@ -5,6 +5,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
 import '../../../shared/models/enums.dart';
 import '../../../shared/widgets/design/premium_card.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/profile_avatar.dart';
 import '../../../shared/widgets/wellin_logo.dart';
@@ -32,7 +33,7 @@ class _UsersPageState extends State<UsersPage> {
       body: BlocBuilder<UsersCubit, UsersState>(
         builder: (context, state) {
           if (state.loading) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoader.page();
           }
           if (state.users.isEmpty) {
             return const EmptyState(message: 'No users found.');

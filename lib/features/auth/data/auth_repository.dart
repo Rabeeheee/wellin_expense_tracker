@@ -200,6 +200,53 @@ class AuthRepository {
     return Profile.fromJson(row);
   }
 
+  Future<bool> hasActiveSuperAdmin() async {
+    try {
+      final result = await _client.rpc('has_active_super_admin');
+      return result == true;
+    } catch (e) {
+      debugPrint('[Auth] has_active_super_admin rpc failed: $e');
+      // Fallback if PostgREST schema cache hasn't picked up the RPC yet.
+      final rows = await _client
+          .from('profiles')
+          .select('id')
+          .eq('role', UserRole.superAdmin.value)
+          .eq('status', UserStatus.active.value)
+          .limit(1);
+      return (rows as List).isNotEmpty;
+    }
+  }
+
+  Future<Profile> claimSuperAdminIfNone() async {
+    try {
+      final row = await _client.rpc('claim_super_admin_if_none');
+      if (row is Map<String, dynamic>) {
+        return Profile.fromJson(row);
+      }
+      if (row is List && row.isNotEmpty) {
+        return Profile.fromJson(row.first as Map<String, dynamic>);
+      }
+    } catch (e) {
+      debugPrint('[Auth] claim_super_admin_if_none rpc failed: $e');
+      // Fallback path when RPC isn't visible yet: only if none are active.
+      final has = await hasActiveSuperAdmin();
+      if (has) {
+        throw Exception('A super admin already exists');
+      }
+      final id = userId;
+      if (id == null) throw Exception('Not signed in');
+      await _client.from('profiles').update({
+        'role': UserRole.superAdmin.value,
+        'status': UserStatus.active.value,
+      }).eq('id', id);
+    }
+    final profile = await fetchMyProfile();
+    if (profile == null || !profile.isSuperAdmin) {
+      throw Exception('Could not claim super admin');
+    }
+    return profile;
+  }
+
   Future<String> uploadAvatar({
     required String userId,
     required List<int> bytes,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/theme_rebuild_scope.dart';
 import '../../../shared/widgets/design/premium_card.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../../auth/bloc/auth_bloc.dart';
@@ -45,7 +46,7 @@ class _ClientsPageState extends State<ClientsPage> {
       body: BlocBuilder<ClientsCubit, ClientsState>(
         builder: (context, state) {
           if (state.loading && state.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoader.page();
           }
           if (state.items.isEmpty) {
             return EmptyState(
