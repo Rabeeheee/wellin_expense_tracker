@@ -76,18 +76,18 @@ class TransactionsState extends Equatable {
   }
 
   double get incomeTotal => items
-      .where((e) => e.type == TxnType.income)
+      .where((e) => e.type == TxnType.income && e.countsInCompanyBooks)
       .fold(0.0, (sum, e) => sum + e.amount);
 
   double get expenseTotal => items
-      .where((e) => e.type == TxnType.expense)
+      .where((e) => e.type == TxnType.expense && e.countsInCompanyBooks)
       .fold(0.0, (sum, e) => sum + e.amount);
 
   double get net => incomeTotal - expenseTotal;
 
   Map<TxnCategory, double> get byCategory {
     final map = <TxnCategory, double>{};
-    for (final item in items) {
+    for (final item in items.where((e) => e.countsInCompanyBooks)) {
       map[item.category] = (map[item.category] ?? 0) + item.amount;
     }
     return map;
@@ -95,7 +95,9 @@ class TransactionsState extends Equatable {
 
   Map<String, double> expenseByUser() {
     final map = <String, double>{};
-    for (final item in items.where((e) => e.type == TxnType.expense)) {
+    for (final item in items.where(
+      (e) => e.type == TxnType.expense && e.countsInCompanyBooks,
+    )) {
       final key = item.creatorName;
       map[key] = (map[key] ?? 0) + item.amount;
     }
@@ -104,7 +106,9 @@ class TransactionsState extends Equatable {
 
   Map<String, double> incomeByUser() {
     final map = <String, double>{};
-    for (final item in items.where((e) => e.type == TxnType.income)) {
+    for (final item in items.where(
+      (e) => e.type == TxnType.income && e.countsInCompanyBooks,
+    )) {
       final key = item.creatorName;
       map[key] = (map[key] ?? 0) + item.amount;
     }
@@ -302,6 +306,7 @@ class TransactionsCubit extends Cubit<TransactionsState> {
     String? projectId,
     bool isEmployeeExpense = false,
     bool employeeExpenseSettled = false,
+    bool employeeChargeCompany = false,
     String? spentBy,
   }) async {
     await _repository.create(
@@ -315,6 +320,7 @@ class TransactionsCubit extends Cubit<TransactionsState> {
       projectId: projectId,
       isEmployeeExpense: isEmployeeExpense,
       employeeExpenseSettled: employeeExpenseSettled,
+      employeeChargeCompany: employeeChargeCompany,
       spentBy: spentBy,
     );
     await load();
@@ -333,6 +339,7 @@ class TransactionsCubit extends Cubit<TransactionsState> {
     bool clearProject = false,
     bool isEmployeeExpense = false,
     bool employeeExpenseSettled = false,
+    bool employeeChargeCompany = false,
     String? spentBy,
   }) async {
     await _repository.update(
@@ -348,6 +355,7 @@ class TransactionsCubit extends Cubit<TransactionsState> {
       clearProject: clearProject,
       isEmployeeExpense: isEmployeeExpense,
       employeeExpenseSettled: employeeExpenseSettled,
+      employeeChargeCompany: employeeChargeCompany,
       spentBy: spentBy,
     );
     await load();
@@ -356,27 +364,28 @@ class TransactionsCubit extends Cubit<TransactionsState> {
   Future<void> setEmployeeExpenseSettled({
     required String id,
     required bool settled,
+    bool chargeCompany = false,
   }) async {
     final previous = state.items;
     final previousYear = _yearItems;
-    _yearItems = _yearItems
-        .map(
-          (e) => e.id == id ? e.copyWith(employeeExpenseSettled: settled) : e,
-        )
-        .toList();
+    TransactionItem patch(TransactionItem e) => e.id == id
+        ? e.copyWith(
+            employeeExpenseSettled: settled,
+            employeeChargeCompany: settled && chargeCompany,
+          )
+        : e;
+    _yearItems = _yearItems.map(patch).toList();
     emit(
       state.copyWith(
-        items: previous
-            .map(
-              (e) => e.id == id
-                  ? e.copyWith(employeeExpenseSettled: settled)
-                  : e,
-            )
-            .toList(),
+        items: previous.map(patch).toList(),
       ),
     );
     try {
-      await _repository.setEmployeeExpenseSettled(id: id, settled: settled);
+      await _repository.setEmployeeExpenseSettled(
+        id: id,
+        settled: settled,
+        chargeCompany: chargeCompany,
+      );
     } catch (_) {
       _yearItems = previousYear;
       emit(state.copyWith(items: previous));

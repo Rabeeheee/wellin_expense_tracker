@@ -167,6 +167,10 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
               ? (_spentBy.isEmpty ? profile.id : _spentBy)
               : profile.id)
           : null;
+      final settled = _isEmployeeExpense &&
+          (widget.existing?.employeeExpenseSettled ?? false);
+      final chargeCompany =
+          settled && (widget.existing?.employeeChargeCompany ?? false);
       if (widget.existing == null) {
         await cubit.add(
           type: _type,
@@ -178,8 +182,8 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
           receiptUrl: receiptUrl,
           projectId: projectId,
           isEmployeeExpense: _isEmployeeExpense,
-          employeeExpenseSettled:
-              _isEmployeeExpense && (widget.existing?.employeeExpenseSettled ?? false),
+          employeeExpenseSettled: settled,
+          employeeChargeCompany: chargeCompany,
           spentBy: spentBy,
         );
       } else {
@@ -195,8 +199,8 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
           projectId: projectId,
           clearProject: projectId == null,
           isEmployeeExpense: _isEmployeeExpense,
-          employeeExpenseSettled:
-              _isEmployeeExpense && widget.existing!.employeeExpenseSettled,
+          employeeExpenseSettled: settled,
+          employeeChargeCompany: chargeCompany,
           spentBy: spentBy,
         );
       }
@@ -416,9 +420,10 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Employee Expense'),
+              title: const Text('Employee Entry'),
               subtitle: const Text(
-                'Track for reimbursement (transport, petrol, etc.)',
+                'Track separately until settled. Does not affect company '
+                'totals until cleared from company.',
               ),
               value: _isEmployeeExpense,
               onChanged: (v) {

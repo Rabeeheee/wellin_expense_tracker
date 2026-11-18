@@ -78,8 +78,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     final type = switch (i) {
       1 => TxnType.income,
       2 => TxnType.expense,
-      3 => TxnType.expense,
-      _ => null,
+      _ => null, // All + By User: income and expense
     };
     context.read<TransactionsCubit>().setTypeFilter(type);
   }
@@ -215,22 +214,21 @@ class _TransactionsPageState extends State<TransactionsPage> {
         map[item.createdBy] = _UserSummary(
           userId: item.createdBy,
           name: item.creatorName,
-          total: item.amount,
-          count: 1,
+          expenseTotal: item.type == TxnType.expense ? item.amount : 0,
+          incomeTotal: item.type == TxnType.income ? item.amount : 0,
+          expenseCount: item.type == TxnType.expense ? 1 : 0,
+          incomeCount: item.type == TxnType.income ? 1 : 0,
         );
       } else {
-        map[item.createdBy] = _UserSummary(
-          userId: existing.userId,
-          name: existing.name,
-          total: existing.total + item.amount,
-          count: existing.count + 1,
-        );
+        map[item.createdBy] = existing.add(item);
       }
     }
     final list = map.values.toList()
       ..sort((a, b) {
-        final byTotal = b.total.compareTo(a.total);
-        if (byTotal != 0) return byTotal;
+        final byExpense = b.expenseTotal.compareTo(a.expenseTotal);
+        if (byExpense != 0) return byExpense;
+        final byIncome = b.incomeTotal.compareTo(a.incomeTotal);
+        if (byIncome != 0) return byIncome;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     return list;
@@ -259,7 +257,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
                 _byUser && !drilling ? _userSummaries(base) : const <_UserSummary>[];
             final maxUserTotal = summaries.isEmpty
                 ? 0.0
-                : summaries.first.total;
+                : summaries
+                    .map((e) => e.expenseTotal + e.incomeTotal)
+                    .fold<double>(0, (a, b) => a > b ? a : b);
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -293,7 +293,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Expenses',
+                            'Entries',
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
@@ -459,7 +459,17 @@ class _TransactionsPageState extends State<TransactionsPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                     child: Text(
-                      '${visible.length} expense${visible.length == 1 ? '' : 's'} · ${formatMoney(visible.fold<double>(0, (s, e) => s + e.amount))}',
+                      () {
+                        final expenses = visible
+                            .where((e) => e.type == TxnType.expense)
+                            .fold<double>(0, (s, e) => s + e.amount);
+                        final income = visible
+                            .where((e) => e.type == TxnType.income)
+                            .fold<double>(0, (s, e) => s + e.amount);
+                        return '${visible.length} entr${visible.length == 1 ? 'y' : 'ies'}'
+                            ' · Exp ${formatMoney(expenses)}'
+                            ' · Inc ${formatMoney(income)}';
+                      }(),
                       style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
@@ -491,9 +501,13 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                 const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               if (index == 0) {
-                                final total = summaries.fold<double>(
+                                final expenseTotal = summaries.fold<double>(
                                   0,
-                                  (s, e) => s + e.total,
+                                  (s, e) => s + e.expenseTotal,
+                                );
+                                final incomeTotal = summaries.fold<double>(
+                                  0,
+                                  (s, e) => s + e.incomeTotal,
                                 );
                                 return PremiumCard(
                                   padding: const EdgeInsets.fromLTRB(
@@ -505,7 +519,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                   child: Column(
                                     children: [
                                       Text(
-                                        formatMoney(total),
+                                        formatMoney(expenseTotal),
                                         style: TextStyle(
                                           fontSize: 26,
                                           fontWeight: FontWeight.w700,
@@ -520,6 +534,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                           fontSize: 13,
                                         ),
                                       ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Income ${formatMoney(incomeTotal)}',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.income,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 );
@@ -527,6 +550,14 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
                               final user = summaries[index - 1];
                               final color = AppColors.chartColor(index - 1);
+                              final barValue =
+                                  user.expenseTotal + user.incomeTotal;
+                              final parts = <String>[
+                                if (user.expenseCount > 0)
+                                  '${user.expenseCount} expense${user.expenseCount == 1 ? '' : 's'}',
+                                if (user.incomeCount > 0)
+                                  '${user.incomeCount} income${user.incomeCount == 1 ? '' : 's'}',
+                              ];
                               return PremiumCard(
                                 onTap: () =>
                                     _openUser(user.userId, user.name),
@@ -578,7 +609,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                '${user.count} expense${user.count == 1 ? '' : 's'}',
+                                                parts.isEmpty
+                                                    ? 'No entries'
+                                                    : parts.join(' · '),
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   color: AppColors
@@ -588,12 +621,31 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                             ],
                                           ),
                                         ),
-                                        Text(
-                                          formatMoney(user.total),
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: color,
-                                          ),
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            if (user.expenseTotal > 0)
+                                              Text(
+                                                formatMoney(
+                                                  user.expenseTotal,
+                                                ),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.expense,
+                                                ),
+                                              ),
+                                            if (user.incomeTotal > 0)
+                                              Text(
+                                                formatMoney(
+                                                  user.incomeTotal,
+                                                ),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.income,
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                         const SizedBox(width: 4),
                                         Icon(
@@ -608,7 +660,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                       child: LinearProgressIndicator(
                                         value: maxUserTotal == 0
                                             ? 0
-                                            : user.total / maxUserTotal,
+                                            : barValue / maxUserTotal,
                                         minHeight: 7,
                                         backgroundColor:
                                             AppColors.primaryMuted,
@@ -686,14 +738,17 @@ class _TransactionsPageState extends State<TransactionsPage> {
       PeriodScope.year => 'Year',
     };
     final emptyPeriod = _byUser
-        ? 'No Expenses By User.'
+        ? 'No Entries By User.'
         : switch (state.typeFilter) {
             TxnType.income => 'No Income This $periodWord.',
             TxnType.expense => 'No Expenses This $periodWord.',
-            null => 'No Expenses This $periodWord.',
+            null => 'No Entries This $periodWord.',
           };
-    final actionLabel =
-        state.typeFilter == TxnType.income ? 'Add Income' : 'Add Expense';
+    final actionLabel = switch (state.typeFilter) {
+      TxnType.income => 'Add Income',
+      TxnType.expense => 'Add Expense',
+      null => 'Add Entry',
+    };
 
     return EmptyState(
       message: searching ? 'No Matches For This Search.' : emptyPeriod,
@@ -715,14 +770,31 @@ class _UserSummary {
   const _UserSummary({
     required this.userId,
     required this.name,
-    required this.total,
-    required this.count,
+    required this.expenseTotal,
+    required this.incomeTotal,
+    required this.expenseCount,
+    required this.incomeCount,
   });
 
   final String userId;
   final String name;
-  final double total;
-  final int count;
+  final double expenseTotal;
+  final double incomeTotal;
+  final int expenseCount;
+  final int incomeCount;
+
+  _UserSummary add(TransactionItem item) {
+    return _UserSummary(
+      userId: userId,
+      name: name,
+      expenseTotal:
+          expenseTotal + (item.type == TxnType.expense ? item.amount : 0),
+      incomeTotal:
+          incomeTotal + (item.type == TxnType.income ? item.amount : 0),
+      expenseCount: expenseCount + (item.type == TxnType.expense ? 1 : 0),
+      incomeCount: incomeCount + (item.type == TxnType.income ? 1 : 0),
+    );
+  }
 }
 
 class _TxnTile extends StatelessWidget {
@@ -808,7 +880,7 @@ class _TxnTile extends StatelessWidget {
       ),
       confirmDismiss: (_) => showAppConfirmDialog(
         context,
-        title: 'Delete Expense?',
+        title: 'Delete Entry?',
         message:
             'Remove "${item.category.label}"? This cannot be undone.',
         confirmLabel: 'Delete',

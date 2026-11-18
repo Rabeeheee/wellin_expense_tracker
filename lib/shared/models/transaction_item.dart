@@ -15,6 +15,7 @@ class TransactionItem {
     this.projectId,
     this.isEmployeeExpense = false,
     this.employeeExpenseSettled = false,
+    this.employeeChargeCompany = false,
     this.spentBy,
     this.creator,
     this.spender,
@@ -30,6 +31,8 @@ class TransactionItem {
   final String? projectId;
   final bool isEmployeeExpense;
   final bool employeeExpenseSettled;
+  /// When settled: true = hit company income/expense; false = personal only.
+  final bool employeeChargeCompany;
   final String? spentBy;
   final String createdBy;
   final DateTime createdAt;
@@ -40,6 +43,13 @@ class TransactionItem {
 
   String get spenderName =>
       spender?.name ?? creatorName;
+
+  /// Company Home / Analytics / project totals only when not employee, or
+  /// settled with "from company".
+  bool get countsInCompanyBooks {
+    if (!isEmployeeExpense) return true;
+    return employeeExpenseSettled && employeeChargeCompany;
+  }
 
   factory TransactionItem.fromJson(Map<String, dynamic> json) {
     Profile? creator;
@@ -65,6 +75,7 @@ class TransactionItem {
       projectId: json['project_id'] as String?,
       isEmployeeExpense: json['is_employee_expense'] as bool? ?? false,
       employeeExpenseSettled: json['employee_expense_settled'] as bool? ?? false,
+      employeeChargeCompany: json['employee_charge_company'] as bool? ?? false,
       spentBy: json['spent_by'] as String?,
       createdBy: json['created_by'] as String,
       createdAt: DateTime.parse(
@@ -87,6 +98,11 @@ class TransactionItem {
         'is_employee_expense': isEmployeeExpense,
         'employee_expense_settled':
             isEmployeeExpense ? employeeExpenseSettled : false,
+        'employee_charge_company': isEmployeeExpense &&
+                employeeExpenseSettled &&
+                employeeChargeCompany
+            ? true
+            : false,
         if (isEmployeeExpense && spentBy != null) 'spent_by': spentBy,
         if (!isEmployeeExpense) 'spent_by': null,
         'created_by': createdBy,
@@ -95,6 +111,7 @@ class TransactionItem {
   TransactionItem copyWith({
     bool? isEmployeeExpense,
     bool? employeeExpenseSettled,
+    bool? employeeChargeCompany,
     String? spentBy,
     bool clearSpentBy = false,
     Profile? spender,
@@ -111,6 +128,8 @@ class TransactionItem {
       isEmployeeExpense: isEmployeeExpense ?? this.isEmployeeExpense,
       employeeExpenseSettled:
           employeeExpenseSettled ?? this.employeeExpenseSettled,
+      employeeChargeCompany:
+          employeeChargeCompany ?? this.employeeChargeCompany,
       spentBy: clearSpentBy ? null : (spentBy ?? this.spentBy),
       createdBy: createdBy,
       createdAt: createdAt,

@@ -69,7 +69,7 @@ class _AppLoaderState extends State<AppLoader>
     final spinner = SizedBox(
       width: widget.size,
       height: widget.size,
-      child: AnimatedBuilder(
+      child: AnimatedBuilder( 
         animation: _controller,
         builder: (context, _) {
           final t = _controller.value;

@@ -54,8 +54,11 @@ class _HomePageState extends State<HomePage> {
             }
 
             final recent = state.items.take(5).toList();
-            final expenseItems =
-                state.items.where((e) => e.type == TxnType.expense).toList();
+            final expenseItems = state.items
+                .where(
+                  (e) => e.type == TxnType.expense && e.countsInCompanyBooks,
+                )
+                .toList();
 
             return RefreshIndicator(
               color: AppColors.primary,

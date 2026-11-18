@@ -63,7 +63,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final trend = results[0];
       final prevItems = results[1];
       final prevExpense = prevItems
-          .where((e) => e.type == TxnType.expense)
+          .where((e) => e.type == TxnType.expense && e.countsInCompanyBooks)
           .fold<double>(0, (s, e) => s + e.amount);
 
       if (!mounted) return;
@@ -321,7 +321,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     List<TransactionItem> items,
     String? projectFilter,
   ) {
-    Iterable<TransactionItem> scoped = items;
+    Iterable<TransactionItem> scoped =
+        items.where((e) => e.countsInCompanyBooks);
     if (projectFilter != null) {
       scoped = scoped.where((e) {
         if (projectFilter.isEmpty) return e.projectId == null;
@@ -365,7 +366,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final label = _shortMonth(d.month);
       final sum = _trendItems
           .where((e) {
-            if (e.type != TxnType.expense) return false;
+            if (e.type != TxnType.expense || !e.countsInCompanyBooks) {
+              return false;
+            }
             if (e.txnDate.year != d.year || e.txnDate.month != d.month) {
               return false;
             }

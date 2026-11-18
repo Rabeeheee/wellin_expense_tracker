@@ -83,7 +83,7 @@ class ShellScaffold extends StatelessWidget {
                     _NavItem(
                       icon: Icons.receipt_long_outlined,
                       selectedIcon: Icons.receipt_long,
-                      label: 'Expenses',
+                      label: 'Entries',
                       selected: selected == 3,
                       onTap: () => _onTap(context, 3),
                     ),
@@ -138,7 +138,7 @@ class _AddExpenseFabState extends State<_AddExpenseFab> {
     ThemeRebuildScope.depend(context);
     return Semantics(
       button: true,
-      label: 'Add Expense',
+      label: 'Add Entry',
       child: GestureDetector(
         onTapDown: (_) => setState(() => _pressed = true),
         onTapCancel: () => setState(() => _pressed = false),

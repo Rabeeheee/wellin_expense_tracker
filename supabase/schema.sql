@@ -71,6 +71,7 @@ create table public.transactions (
   project_id uuid references public.projects (id) on delete set null,
   is_employee_expense boolean not null default false,
   employee_expense_settled boolean not null default false,
+  employee_charge_company boolean not null default false,
   spent_by uuid references public.profiles (id) on delete restrict,
   created_by uuid not null references public.profiles (id) on delete restrict,
   created_at timestamptz not null default now(),
@@ -78,7 +79,12 @@ create table public.transactions (
   constraint employee_expense_spent_by_required
     check (not is_employee_expense or spent_by is not null),
   constraint employee_expense_settled_requires_flag
-    check (not employee_expense_settled or is_employee_expense)
+    check (not employee_expense_settled or is_employee_expense),
+  constraint employee_charge_company_requires_settled
+    check (
+      not employee_charge_company
+      or (is_employee_expense and employee_expense_settled)
+    )
 );
 
 create table public.reminders (

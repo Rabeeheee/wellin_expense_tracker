@@ -23,7 +23,9 @@ import '../../transactions/bloc/transactions_cubit.dart';
 
 enum _SettleFilter { all, pending, completed }
 
-enum _ChartMode { category, spender }
+enum _ViewMode { category, spender }
+
+enum _SettleCharge { company, personal }
 
 class EmployeeExpensesPage extends StatefulWidget {
   const EmployeeExpensesPage({super.key});
@@ -34,7 +36,14 @@ class EmployeeExpensesPage extends StatefulWidget {
 
 class _EmployeeExpensesPageState extends State<EmployeeExpensesPage> {
   _SettleFilter _settleFilter = _SettleFilter.all;
-  _ChartMode _chartMode = _ChartMode.category;
+  _ViewMode _viewMode = _ViewMode.category;
+  String? _selectedSpenderId;
+  String? _selectedSpenderName;
+
+  bool get _drilling =>
+      _viewMode == _ViewMode.spender && _selectedSpenderId != null;
+
+  String _spenderKey(TransactionItem e) => e.spentBy ?? e.createdBy;
 
   List<TransactionItem> _employeeItems(List<TransactionItem> all) {
     var items = all.where((e) => e.isEmployeeExpense).toList();
@@ -53,22 +62,174 @@ class _EmployeeExpensesPageState extends State<EmployeeExpensesPage> {
       .where((e) => e.type == TxnType.expense)
       .fold(0.0, (s, e) => s + e.amount);
 
+  double _incomeTotal(List<TransactionItem> items) => items
+      .where((e) => e.type == TxnType.income)
+      .fold(0.0, (s, e) => s + e.amount);
+
+  List<_SpenderSummary> _spenderSummaries(List<TransactionItem> items) {
+    final map = <String, _SpenderSummary>{};
+    for (final item in items) {
+      final id = _spenderKey(item);
+      final existing = map[id];
+      if (existing == null) {
+        map[id] = _SpenderSummary(
+          userId: id,
+          name: item.spenderName,
+          expenseTotal: item.type == TxnType.expense ? item.amount : 0,
+          incomeTotal: item.type == TxnType.income ? item.amount : 0,
+          expenseCount: item.type == TxnType.expense ? 1 : 0,
+          incomeCount: item.type == TxnType.income ? 1 : 0,
+        );
+      } else {
+        map[id] = existing.add(item);
+      }
+    }
+    final list = map.values.toList()
+      ..sort((a, b) {
+        final byExpense = b.expenseTotal.compareTo(a.expenseTotal);
+        if (byExpense != 0) return byExpense;
+        final byIncome = b.incomeTotal.compareTo(a.incomeTotal);
+        if (byIncome != 0) return byIncome;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    return list;
+  }
+
+  void _openSpender(String userId, String name) {
+    setState(() {
+      _selectedSpenderId = userId;
+      _selectedSpenderName = name;
+    });
+  }
+
+  void _closeSpender() {
+    setState(() {
+      _selectedSpenderId = null;
+      _selectedSpenderName = null;
+    });
+  }
+
+  void _setViewMode(int i) {
+    setState(() {
+      _viewMode = _ViewMode.values[i];
+      _selectedSpenderId = null;
+      _selectedSpenderName = null;
+    });
+  }
+
+  Future<_SettleCharge?> _pickSettleCharge(TransactionItem item) {
+    final isExpense = item.type == TxnType.expense;
+    return showModalBottomSheet<_SettleCharge>(
+      context: context,
+      backgroundColor: AppColors.surfaceElevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'How was this settled?',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isExpense
+                      ? 'Company deducts from company income. Personal '
+                          'keeps company totals unchanged.'
+                      : 'Company adds to company income. Personal keeps '
+                          'company totals unchanged.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.account_balance_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    isExpense
+                        ? 'Deduct from company'
+                        : 'Credit to company',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isExpense
+                        ? 'Counts in company expenses / net'
+                        : 'Counts in company income / net',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  onTap: () => Navigator.pop(ctx, _SettleCharge.company),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.person_outline_rounded,
+                    color: AppColors.accent,
+                  ),
+                  title: Text(
+                    'Deduct from personal',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Settled without changing company books',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  onTap: () => Navigator.pop(ctx, _SettleCharge.personal),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _toggleSettled(TransactionItem item) async {
     final markComplete = !item.employeeExpenseSettled;
-    final ok = await showAppConfirmDialog(
-      context,
-      title: markComplete ? 'Mark Completed?' : 'Undo Completion?',
-      message: markComplete
-          ? 'Mark this as reimbursed to ${item.spenderName}.'
-          : 'Move this back to pending.',
-      confirmLabel: markComplete ? 'Complete' : 'Undo',
-      tone: markComplete ? AppConfirmTone.success : AppConfirmTone.danger,
-    );
-    if (!ok || !mounted) return;
+    var chargeCompany = false;
+
+    if (markComplete) {
+      final charge = await _pickSettleCharge(item);
+      if (charge == null || !mounted) return;
+      chargeCompany = charge == _SettleCharge.company;
+    } else {
+      final ok = await showAppConfirmDialog(
+        context,
+        title: 'Undo Completion?',
+        message:
+            'Move this back to pending. It will leave company totals again '
+            'if it was deducted from company.',
+        confirmLabel: 'Undo',
+        tone: AppConfirmTone.danger,
+      );
+      if (!ok || !mounted) return;
+    }
+
     try {
       await context.read<TransactionsCubit>().setEmployeeExpenseSettled(
             id: item.id,
             settled: markComplete,
+            chargeCompany: chargeCompany,
           );
     } catch (e) {
       if (!mounted) return;
@@ -95,6 +256,76 @@ class _EmployeeExpensesPageState extends State<EmployeeExpensesPage> {
     }
   }
 
+  List<Widget> _entryTiles({
+    required List<TransactionItem> items,
+    required String? myId,
+    required bool isSuperAdmin,
+  }) {
+    if (items.isEmpty) {
+      return [
+        const EmptyState(
+          message:
+              'No employee entries yet. Flag one when saving an expense or income.',
+        ),
+      ];
+    }
+
+    return [
+      for (final item in items) ...[
+        Builder(
+          builder: (context) {
+            final canManage = item.createdBy == myId || isSuperAdmin;
+            final tile = _EmployeeExpenseTile(
+              item: item,
+              onTap: canManage
+                  ? () => context.push(
+                        '/transactions/${item.id}/edit',
+                        extra: item,
+                      )
+                  : null,
+              onToggleSettled: () => _toggleSettled(item),
+            );
+            if (!canManage) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: tile,
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Dismissible(
+                key: ValueKey('emp-${item.id}'),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  decoration: BoxDecoration(
+                    color: AppColors.expenseSoft,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.expense,
+                  ),
+                ),
+                confirmDismiss: (_) => showAppConfirmDialog(
+                  context,
+                  title: 'Delete Entry?',
+                  message:
+                      'Remove "${item.category.label}" for ${item.spenderName}? This cannot be undone.',
+                  confirmLabel: 'Delete',
+                  tone: AppConfirmTone.danger,
+                ),
+                onDismissed: (_) => _delete(item),
+                child: tile,
+              ),
+            );
+          },
+        ),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     ThemeRebuildScope.depend(context);
@@ -102,218 +333,425 @@ class _EmployeeExpensesPageState extends State<EmployeeExpensesPage> {
     final myId = profile?.id;
     final isSuperAdmin = profile?.isSuperAdmin == true;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const WellinAppBarTitle(title: 'Employee Expenses'),
-      ),
-      body: BlocBuilder<TransactionsCubit, TransactionsState>(
-        builder: (context, state) {
-          if (state.loading && state.items.isEmpty) {
-            return const AppLoader.page();
-          }
+    return PopScope(
+      canPop: !_drilling,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _drilling) _closeSpender();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: _drilling
+              ? IconButton(
+                  tooltip: 'Back',
+                  onPressed: _closeSpender,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                )
+              : null,
+          title: WellinAppBarTitle(
+            title: _drilling
+                ? (_selectedSpenderName ?? 'Spender')
+                : 'Employee Entries',
+          ),
+        ),
+        body: BlocBuilder<TransactionsCubit, TransactionsState>(
+          builder: (context, state) {
+            if (state.loading && state.items.isEmpty) {
+              return const AppLoader.page();
+            }
 
-          final allEmployee =
-              state.items.where((e) => e.isEmployeeExpense).toList();
-          final pending = allEmployee
-              .where((e) => !e.employeeExpenseSettled)
-              .toList();
-          final settled = allEmployee
-              .where((e) => e.employeeExpenseSettled)
-              .toList();
-          final filtered = _employeeItems(state.items);
+            final allEmployee =
+                state.items.where((e) => e.isEmployeeExpense).toList();
+            final pending = allEmployee
+                .where((e) => !e.employeeExpenseSettled)
+                .toList();
+            final settled = allEmployee
+                .where((e) => e.employeeExpenseSettled)
+                .toList();
+            final filtered = _employeeItems(state.items);
+            final visible = _drilling
+                ? filtered
+                    .where((e) => _spenderKey(e) == _selectedSpenderId)
+                    .toList()
+                : filtered;
 
-          final pendingTotal = _expenseTotal(pending);
-          final settledTotal = _expenseTotal(settled);
-          final allTotal = _expenseTotal(allEmployee);
+            final pendingTotal = _expenseTotal(pending);
+            final settledTotal = _expenseTotal(settled);
+            final allTotal = _expenseTotal(allEmployee);
 
-          final categoryMap = <TxnCategory, double>{};
-          final spenderMap = <String, double>{};
-          for (final item in filtered.where((e) => e.type == TxnType.expense)) {
-            categoryMap[item.category] =
-                (categoryMap[item.category] ?? 0) + item.amount;
-            spenderMap[item.spenderName] =
-                (spenderMap[item.spenderName] ?? 0) + item.amount;
-          }
-          final chartTotal = filtered
-              .where((e) => e.type == TxnType.expense)
-              .fold(0.0, (s, e) => s + e.amount);
+            final categoryMap = <TxnCategory, double>{};
+            for (final item
+                in filtered.where((e) => e.type == TxnType.expense)) {
+              categoryMap[item.category] =
+                  (categoryMap[item.category] ?? 0) + item.amount;
+            }
+            final chartTotal = filtered
+                .where((e) => e.type == TxnType.expense)
+                .fold(0.0, (s, e) => s + e.amount);
 
-          return RefreshIndicator(
-            color: AppColors.primary,
-            backgroundColor: AppColors.surface,
-            onRefresh: () => context.read<TransactionsCubit>().load(),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Reimbursements',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    MonthYearFilter(
-                      year: state.year,
-                      month: state.month,
-                      day: state.day,
-                      scope: state.scope,
-                      compact: true,
-                      onChanged: (y, m, d) => context
-                          .read<TransactionsCubit>()
-                          .setDate(y, m, d),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                PeriodScopeChips(
-                  scope: state.scope,
-                  onChanged: (v) =>
-                      context.read<TransactionsCubit>().setScope(v),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: MetricTile(
-                        compact: true,
-                        label: 'Pending',
-                        value: formatMoney(pendingTotal),
-                        icon: Icons.schedule_rounded,
-                        accent: AppColors.expense,
-                        accentSoft: AppColors.expense.withValues(alpha: 0.12),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: MetricTile(
-                        compact: true,
-                        label: 'Settled',
-                        value: formatMoney(settledTotal),
-                        icon: Icons.check_circle_outline,
-                        accent: AppColors.income,
-                        accentSoft: AppColors.income.withValues(alpha: 0.12),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: MetricTile(
-                        compact: true,
-                        label: 'All',
-                        value: formatMoney(allTotal),
-                        icon: Icons.payments_outlined,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                FilterChipsRow(
-                  labels: const ['All', 'Pending', 'Completed'],
-                  selectedIndex: _settleFilter.index,
-                  onSelected: (i) => setState(
-                    () => _settleFilter = _SettleFilter.values[i],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FilterChipsRow(
-                  labels: const ['By Category', 'By Spender'],
-                  selectedIndex: _chartMode.index,
-                  onSelected: (i) => setState(
-                    () => _chartMode = _ChartMode.values[i],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                PremiumCard(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                  child: chartTotal <= 0
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 28),
+            final summaries = _viewMode == _ViewMode.spender && !_drilling
+                ? _spenderSummaries(filtered)
+                : const <_SpenderSummary>[];
+            final maxSpendBar = summaries.isEmpty
+                ? 0.0
+                : summaries
+                    .map((e) => e.expenseTotal + e.incomeTotal)
+                    .fold<double>(0, (a, b) => a > b ? a : b);
+
+            return RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: AppColors.surface,
+              onRefresh: () => context.read<TransactionsCubit>().load(),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+                children: [
+                  if (!_drilling) ...[
+                    Row(
+                      children: [
+                        Expanded(
                           child: Text(
-                            'No Employee Expenses In This Period.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textSecondary),
+                            'Employee Entries',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
-                        )
-                      : _chartMode == _ChartMode.category
-                          ? _CategoryDonut(
+                        ),
+                        MonthYearFilter(
+                          year: state.year,
+                          month: state.month,
+                          day: state.day,
+                          scope: state.scope,
+                          compact: true,
+                          onChanged: (y, m, d) => context
+                              .read<TransactionsCubit>()
+                              .setDate(y, m, d),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    PeriodScopeChips(
+                      scope: state.scope,
+                      onChanged: (v) =>
+                          context.read<TransactionsCubit>().setScope(v),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: MetricTile(
+                            compact: true,
+                            label: 'Pending',
+                            value: formatMoney(pendingTotal),
+                            icon: Icons.schedule_rounded,
+                            accent: AppColors.expense,
+                            accentSoft:
+                                AppColors.expense.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: MetricTile(
+                            compact: true,
+                            label: 'Settled',
+                            value: formatMoney(settledTotal),
+                            icon: Icons.check_circle_outline,
+                            accent: AppColors.income,
+                            accentSoft:
+                                AppColors.income.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: MetricTile(
+                            compact: true,
+                            label: 'All',
+                            value: formatMoney(allTotal),
+                            icon: Icons.payments_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    FilterChipsRow(
+                      labels: const ['All', 'Pending', 'Completed'],
+                      selectedIndex: _settleFilter.index,
+                      onSelected: (i) => setState(
+                        () => _settleFilter = _SettleFilter.values[i],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilterChipsRow(
+                      labels: const ['By Category', 'By Spender'],
+                      selectedIndex: _viewMode.index,
+                      onSelected: _setViewMode,
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    Text(
+                      '${visible.length} entr${visible.length == 1 ? 'y' : 'ies'}'
+                      ' · Exp ${formatMoney(_expenseTotal(visible))}'
+                      ' · Inc ${formatMoney(_incomeTotal(visible))}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_viewMode == _ViewMode.category && !_drilling) ...[
+                    PremiumCard(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                      child: chartTotal <= 0
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 28),
+                              child: Text(
+                                'No Employee Entries In This Period.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            )
+                          : _CategoryDonut(
                               map: categoryMap,
                               total: chartTotal,
-                            )
-                          : _SpenderBars(map: spenderMap),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Items (${filtered.length})',
+                            ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Items (${visible.length})',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._entryTiles(
+                      items: visible,
+                      myId: myId,
+                      isSuperAdmin: isSuperAdmin,
+                    ),
+                  ] else if (_viewMode == _ViewMode.spender && !_drilling) ...[
+                    if (summaries.isEmpty)
+                      const EmptyState(
+                        message:
+                            'No employee entries yet. Flag one when saving an expense or income.',
+                      )
+                    else ...[
+                      PremiumCard(
+                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                        child: Column(
+                          children: [
+                            Text(
+                              formatMoney(
+                                summaries.fold<double>(
+                                  0,
+                                  (s, e) => s + e.expenseTotal,
+                                ),
+                              ),
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.expense,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Expense by spender · Tap a person',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Income ${formatMoney(summaries.fold<double>(0, (s, e) => s + e.incomeTotal))}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.income,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      for (var i = 0; i < summaries.length; i++) ...[
+                        _SpenderSummaryTile(
+                          summary: summaries[i],
+                          color: AppColors.chartColor(i),
+                          maxBar: maxSpendBar,
+                          onTap: () => _openSpender(
+                            summaries[i].userId,
+                            summaries[i].name,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ],
+                  ] else ...[
+                    ..._entryTiles(
+                      items: visible,
+                      myId: myId,
+                      isSuperAdmin: isSuperAdmin,
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SpenderSummary {
+  const _SpenderSummary({
+    required this.userId,
+    required this.name,
+    required this.expenseTotal,
+    required this.incomeTotal,
+    required this.expenseCount,
+    required this.incomeCount,
+  });
+
+  final String userId;
+  final String name;
+  final double expenseTotal;
+  final double incomeTotal;
+  final int expenseCount;
+  final int incomeCount;
+
+  int get count => expenseCount + incomeCount;
+
+  _SpenderSummary add(TransactionItem item) {
+    return _SpenderSummary(
+      userId: userId,
+      name: name,
+      expenseTotal:
+          expenseTotal + (item.type == TxnType.expense ? item.amount : 0),
+      incomeTotal:
+          incomeTotal + (item.type == TxnType.income ? item.amount : 0),
+      expenseCount: expenseCount + (item.type == TxnType.expense ? 1 : 0),
+      incomeCount: incomeCount + (item.type == TxnType.income ? 1 : 0),
+    );
+  }
+}
+
+class _SpenderSummaryTile extends StatelessWidget {
+  const _SpenderSummaryTile({
+    required this.summary,
+    required this.color,
+    required this.maxBar,
+    required this.onTap,
+  });
+
+  final _SpenderSummary summary;
+  final Color color;
+  final double maxBar;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    ThemeRebuildScope.depend(context);
+    final barValue = summary.expenseTotal + summary.incomeTotal;
+    final parts = <String>[
+      if (summary.expenseCount > 0)
+        '${summary.expenseCount} expense${summary.expenseCount == 1 ? '' : 's'}',
+      if (summary.incomeCount > 0)
+        '${summary.incomeCount} income${summary.incomeCount == 1 ? '' : 's'}',
+    ];
+
+    return PremiumCard(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: color.withValues(alpha: 0.18),
+                child: Text(
+                  summary.name.isEmpty
+                      ? '?'
+                      : summary.name.characters.first.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: color,
                   ),
                 ),
-                const SizedBox(height: 12),
-                if (filtered.isEmpty)
-                  const EmptyState(
-                    message:
-                        'No employee expenses yet. Flag one when saving an expense or income.',
-                  )
-                else
-                  ...filtered.map((item) {
-                    final canManage =
-                        item.createdBy == myId || isSuperAdmin;
-                    final tile = _EmployeeExpenseTile(
-                      item: item,
-                      onTap: canManage
-                          ? () => context.push(
-                                '/transactions/${item.id}/edit',
-                                extra: item,
-                              )
-                          : null,
-                      onToggleSettled: () => _toggleSettled(item),
-                    );
-                    if (!canManage) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: tile,
-                      );
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Dismissible(
-                        key: ValueKey('emp-${item.id}'),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          decoration: BoxDecoration(
-                            color: AppColors.expenseSoft,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Icon(
-                            Icons.delete_outline_rounded,
-                            color: AppColors.expense,
-                          ),
-                        ),
-                        confirmDismiss: (_) => showAppConfirmDialog(
-                          context,
-                          title: 'Delete Expense?',
-                          message:
-                              'Remove "${item.category.label}" for ${item.spenderName}? This cannot be undone.',
-                          confirmLabel: 'Delete',
-                          tone: AppConfirmTone.danger,
-                        ),
-                        onDismissed: (_) => _delete(item),
-                        child: tile,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      summary.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
                       ),
-                    );
-                  }),
-              ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      parts.isEmpty ? 'No entries' : parts.join(' · '),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (summary.expenseTotal > 0)
+                    Text(
+                      formatMoney(summary.expenseTotal),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.expense,
+                      ),
+                    ),
+                  if (summary.incomeTotal > 0)
+                    Text(
+                      formatMoney(summary.incomeTotal),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.income,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textTertiary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: maxBar == 0 ? 0 : barValue / maxBar,
+              minHeight: 7,
+              backgroundColor: AppColors.primaryMuted,
+              color: color,
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -334,6 +772,16 @@ class _EmployeeExpenseTile extends StatelessWidget {
   Widget build(BuildContext context) {
     ThemeRebuildScope.depend(context);
     final settled = item.employeeExpenseSettled;
+    final statusLabel = !settled
+        ? 'Pending'
+        : item.employeeChargeCompany
+            ? 'Company'
+            : 'Personal';
+    final statusColor = !settled
+        ? AppColors.expense
+        : item.employeeChargeCompany
+            ? AppColors.primary
+            : AppColors.accent;
     return PremiumCard(
       onTap: onTap,
       child: Row(
@@ -364,7 +812,8 @@ class _EmployeeExpenseTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${item.spenderName} · ${formatDate(item.txnDate)}',
+                  '${item.spenderName} · ${formatDate(item.txnDate)} · '
+                  '${item.type.label}',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -391,17 +840,15 @@ class _EmployeeExpenseTile extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: settled
-                            ? AppColors.income.withValues(alpha: 0.12)
-                            : AppColors.expense.withValues(alpha: 0.12),
+                        color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        settled ? 'Completed' : 'Pending',
+                        statusLabel,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: settled ? AppColors.income : AppColors.expense,
+                          color: statusColor,
                         ),
                       ),
                     ),
@@ -510,74 +957,6 @@ class _CategoryDonut extends StatelessWidget {
               ),
           ],
         ),
-      ],
-    );
-  }
-}
-
-class _SpenderBars extends StatelessWidget {
-  const _SpenderBars({required this.map});
-
-  final Map<String, double> map;
-
-  @override
-  Widget build(BuildContext context) {
-    ThemeRebuildScope.depend(context);
-    if (map.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Text(
-          'No Spenders Yet.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-      );
-    }
-    final entries = map.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final max = entries.first.value;
-
-    return Column(
-      children: [
-        for (var i = 0; i < entries.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        entries[i].key,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      formatMoney(entries[i].value),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.chartColor(i),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: max == 0 ? 0 : entries[i].value / max,
-                    minHeight: 8,
-                    backgroundColor: AppColors.primaryMuted,
-                    color: AppColors.chartColor(i),
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }

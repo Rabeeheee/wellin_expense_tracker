@@ -143,6 +143,7 @@ class TransactionRepository {
     String? projectId,
     bool isEmployeeExpense = false,
     bool employeeExpenseSettled = false,
+    bool employeeChargeCompany = false,
     String? spentBy,
   }) async {
     final item = TransactionItem(
@@ -156,6 +157,7 @@ class TransactionRepository {
       projectId: projectId,
       isEmployeeExpense: isEmployeeExpense,
       employeeExpenseSettled: employeeExpenseSettled,
+      employeeChargeCompany: employeeChargeCompany,
       spentBy: spentBy,
       createdBy: createdBy,
       createdAt: DateTime.now(),
@@ -190,6 +192,7 @@ class TransactionRepository {
     bool clearProject = false,
     bool isEmployeeExpense = false,
     bool employeeExpenseSettled = false,
+    bool employeeChargeCompany = false,
     String? spentBy,
   }) async {
     final payload = <String, dynamic>{
@@ -201,6 +204,11 @@ class TransactionRepository {
       'is_employee_expense': isEmployeeExpense,
       'employee_expense_settled':
           isEmployeeExpense ? employeeExpenseSettled : false,
+      'employee_charge_company': isEmployeeExpense &&
+              employeeExpenseSettled &&
+              employeeChargeCompany
+          ? true
+          : false,
       'spent_by': isEmployeeExpense ? spentBy : null,
     };
     if (clearReceipt) {
@@ -234,12 +242,19 @@ class TransactionRepository {
   Future<TransactionItem> setEmployeeExpenseSettled({
     required String id,
     required bool settled,
+    bool chargeCompany = false,
   }) async {
-    _log('setEmployeeExpenseSettled id=$id settled=$settled');
+    _log(
+      'setEmployeeExpenseSettled id=$id settled=$settled '
+      'chargeCompany=$chargeCompany',
+    );
     try {
       final row = await _client
           .from('transactions')
-          .update({'employee_expense_settled': settled})
+          .update({
+            'employee_expense_settled': settled,
+            'employee_charge_company': settled && chargeCompany,
+          })
           .eq('id', id)
           .eq('is_employee_expense', true)
           .select(_select)

@@ -166,7 +166,7 @@ class _MorePageState extends State<MorePage> {
             const SizedBox(height: 10),
             _MoreTile(
               icon: Icons.badge_outlined,
-              title: 'Employee Expenses',
+              title: 'Employee Entries',
               subtitle: 'Transport, Petrol, And Reimbursements',
               onTap: () => context.push('/employee-expenses'),
             ),

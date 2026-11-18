@@ -164,7 +164,10 @@ class ProjectRepository {
     try {
       final rows = await _client
           .from('transactions')
-          .select('project_id, type, amount')
+          .select(
+            'project_id, type, amount, is_employee_expense, '
+            'employee_expense_settled, employee_charge_company',
+          )
           .inFilter('project_id', ids);
 
       final received = <String, double>{};
@@ -173,6 +176,10 @@ class ProjectRepository {
         final map = raw as Map<String, dynamic>;
         final projectId = map['project_id'] as String?;
         if (projectId == null) continue;
+        final isEmployee = map['is_employee_expense'] as bool? ?? false;
+        final settled = map['employee_expense_settled'] as bool? ?? false;
+        final chargeCompany = map['employee_charge_company'] as bool? ?? false;
+        if (isEmployee && !(settled && chargeCompany)) continue;
         final amount = (map['amount'] as num).toDouble();
         final type = map['type'] as String;
         if (type == TxnType.income.value) {
