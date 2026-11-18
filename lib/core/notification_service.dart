@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -12,6 +10,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  bool _ready = false;
+
   static const _advanceChannelId = 'reminders_advance_v1';
   static const _dueChannelId = 'reminders_due_v3';
   static const _overdueChannelId = 'reminders_overdue_v3';
@@ -22,6 +22,11 @@ class NotificationService {
   static const _advanceGap = Duration(hours: 1);
 
   Future<void> init() async {
+    if (kIsWeb) {
+      debugPrint('[Notifications] skipped on web');
+      return;
+    }
+
     tzdata.initializeTimeZones();
     try {
       final info = await FlutterTimezone.getLocalTimezone();
@@ -45,16 +50,16 @@ class NotificationService {
 
     await _requestPermissions();
     await _ensureAndroidChannels();
+    _ready = true;
   }
 
   Future<void> _requestPermissions() async {
-    if (kIsWeb) return;
-    if (Platform.isAndroid) {
+    if (defaultTargetPlatform == TargetPlatform.android) {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       await android?.requestNotificationsPermission();
       await android?.requestExactAlarmsPermission();
-    } else if (Platform.isIOS) {
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
       final ios = _plugin.resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin>();
       await ios?.requestPermissions(alert: true, badge: true, sound: true);
@@ -200,6 +205,7 @@ class NotificationService {
     required String title,
     required DateTime dueLocal,
   }) async {
+    if (!_ready) return;
     await cancelReminder(reminderId);
 
     final now = DateTime.now();
@@ -267,6 +273,7 @@ class NotificationService {
   }
 
   Future<void> cancelReminder(String reminderId) async {
+    if (!_ready) return;
     await _plugin.cancel(id: advanceNotificationId(reminderId));
     await _plugin.cancel(id: dueNotificationId(reminderId));
     // Legacy single overdue id from older builds.
@@ -278,5 +285,8 @@ class NotificationService {
     }
   }
 
-  Future<void> cancelAll() => _plugin.cancelAll();
+  Future<void> cancelAll() async {
+    if (!_ready) return;
+    await _plugin.cancelAll();
+  }
 }

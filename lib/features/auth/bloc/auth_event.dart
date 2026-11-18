@@ -12,11 +12,28 @@ final class AuthStarted extends AuthEvent {
 }
 
 final class AuthSessionChanged extends AuthEvent {
-  const AuthSessionChanged(this.session);
+  const AuthSessionChanged(this.session, {this.event});
   final Session? session;
+  final AuthChangeEvent? event;
 
   @override
-  List<Object?> get props => [session?.accessToken];
+  List<Object?> get props => [session?.accessToken, event];
+}
+
+final class AuthPasswordResetEmailRequested extends AuthEvent {
+  const AuthPasswordResetEmailRequested({required this.email});
+  final String email;
+
+  @override
+  List<Object?> get props => [email];
+}
+
+final class AuthPasswordUpdateRequested extends AuthEvent {
+  const AuthPasswordUpdateRequested({required this.password});
+  final String password;
+
+  @override
+  List<Object?> get props => [password];
 }
 
 final class AuthLoginRequested extends AuthEvent {
@@ -47,6 +64,19 @@ final class AuthRegisterRequested extends AuthEvent {
 
 final class AuthGoogleRequested extends AuthEvent {
   const AuthGoogleRequested();
+}
+
+/// Web GIS button started / completed sign-in handshake.
+final class AuthGoogleWebStarted extends AuthEvent {
+  const AuthGoogleWebStarted();
+}
+
+final class AuthGoogleWebFailed extends AuthEvent {
+  const AuthGoogleWebFailed(this.message);
+  final String message;
+
+  @override
+  List<Object?> get props => [message];
 }
 
 final class AuthCompleteProfileRequested extends AuthEvent {

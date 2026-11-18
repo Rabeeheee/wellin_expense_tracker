@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../../shared/models/enums.dart';
 import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../bloc/auth_bloc.dart';
+import 'google_gis_button.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -159,15 +161,24 @@ class _RegisterPageState extends State<RegisterPage> {
                           : const Text('Create account'),
                     ),
                     const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: loading
-                          ? null
-                          : () => context
-                              .read<AuthBloc>()
-                              .add(const AuthGoogleRequested()),
-                      icon: const Icon(Icons.g_mobiledata, size: 28),
-                      label: const Text('Continue With Google'),
-                    ),
+                    if (kIsWeb)
+                      IgnorePointer(
+                        ignoring: loading,
+                        child: Opacity(
+                          opacity: loading ? 0.5 : 1,
+                          child: googleGisSignInButton(),
+                        ),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed: loading
+                            ? null
+                            : () => context
+                                .read<AuthBloc>()
+                                .add(const AuthGoogleRequested()),
+                        icon: const Icon(Icons.g_mobiledata, size: 28),
+                        label: const Text('Continue With Google'),
+                      ),
                     TextButton(
                       onPressed: () => context.go('/login'),
                       child: const Text('Already have an account? Sign in'),

@@ -1,3 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +16,16 @@ class AuthRepository {
 
   final SupabaseClient _client;
   bool _googleInitialized = false;
+  StreamSubscription<GoogleSignInAuthenticationEvent>? _webGoogleSub;
+  bool _webGoogleListenerAttached = false;
+  /// Raw nonce for web GIS → Supabase. Google gets the SHA-256 hex form.
+  String? _googleRawNonce;
+
+  static String _generateRawNonce([int length = 32]) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(length, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
 
   void _log(String message) {
     debugPrint('[Auth/Google] $message');
@@ -53,19 +68,39 @@ class AuthRepository {
     final webClientId = AppConfig.googleWebClientId;
     final iosClientId = AppConfig.googleIosClientId;
     final useIosClientId =
-        defaultTargetPlatform == TargetPlatform.iOS && iosClientId.isNotEmpty;
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        iosClientId.isNotEmpty;
+    // Web needs the OAuth web client as clientId (+ meta tag in index.html).
+    final clientId = kIsWeb
+        ? (webClientId.isEmpty ? null : webClientId)
+        : (useIosClientId ? iosClientId : null);
+    final serverClientId =
+        kIsWeb || webClientId.isEmpty ? null : webClientId;
+    // Web GIS previously sent nonce as the literal string "null", which
+    // breaks Supabase (claim present, param absent). Always pair a real nonce.
+    String? hashedNonce;
+    if (kIsWeb) {
+      _googleRawNonce = _generateRawNonce();
+      hashedNonce = sha256.convert(utf8.encode(_googleRawNonce!)).toString();
+    } else {
+      _googleRawNonce = null;
+    }
     _log(
       'Initializing GoogleSignIn. '
+      'kIsWeb=$kIsWeb '
       'GOOGLE_WEB_CLIENT_ID set=${webClientId.isNotEmpty} '
       '(length=${webClientId.length}), '
       'GOOGLE_IOS_CLIENT_ID set=${iosClientId.isNotEmpty} '
       '(length=${iosClientId.length}), '
-      'passing clientId=$useIosClientId',
+      'clientId=${clientId != null}, serverClientId=${serverClientId != null}, '
+      'nonce=${hashedNonce != null}',
     );
     try {
       await GoogleSignIn.instance.initialize(
-        clientId: useIosClientId ? iosClientId : null,
-        serverClientId: webClientId.isEmpty ? null : webClientId,
+        clientId: clientId,
+        serverClientId: serverClientId,
+        nonce: hashedNonce,
       );
       _googleInitialized = true;
       _log('GoogleSignIn.initialize() succeeded');
@@ -74,6 +109,72 @@ class AuthRepository {
       _log('Stack: $st');
       rethrow;
     }
+  }
+
+  /// Web cannot call [GoogleSignIn.authenticate]. Listen for GIS button events
+  /// and complete Supabase sign-in with the idToken.
+  Future<void> attachWebGoogleSignInListener({
+    VoidCallback? onSignInStarted,
+    void Function(Object error)? onError,
+  }) async {
+    if (!kIsWeb || _webGoogleListenerAttached) return;
+    if (AppConfig.googleWebClientId.isEmpty) return;
+
+    await _ensureGoogleInitialized();
+    _webGoogleListenerAttached = true;
+    _log('Attaching web Google authenticationEvents listener');
+
+    _webGoogleSub = GoogleSignIn.instance.authenticationEvents.listen(
+      (event) async {
+        if (event is! GoogleSignInAuthenticationEventSignIn) return;
+        try {
+          onSignInStarted?.call();
+          _log(
+            'Web Google sign-in event. email=${event.user.email}',
+          );
+          await _completeGoogleWithAccount(event.user);
+        } catch (e, st) {
+          _log('Web Google complete failed: $e');
+          _log('Stack: $st');
+          onError?.call(e);
+        }
+      },
+      onError: (Object e, StackTrace st) {
+        _log('Web Google authenticationEvents error: $e');
+        _log('Stack: $st');
+        onError?.call(e);
+      },
+    );
+  }
+
+  Future<AuthResponse> _completeGoogleWithAccount(
+    GoogleSignInAccount account,
+  ) async {
+    final idToken = account.authentication.idToken;
+    _log(
+      'idToken present=${idToken != null} length=${idToken?.length ?? 0}',
+    );
+    if (idToken == null) {
+      throw Exception(
+        'Google sign-in failed: missing idToken. '
+        'Check GOOGLE_WEB_CLIENT_ID and Supabase Google provider settings.',
+      );
+    }
+
+    _log(
+      'Calling Supabase signInWithIdToken(provider=google)... '
+      'nonce=${_googleRawNonce != null}',
+    );
+    final response = await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      nonce: _googleRawNonce,
+    );
+    _log(
+      'Supabase signInWithIdToken ok. '
+      'userId=${response.user?.id}, email=${response.user?.email}',
+    );
+    return response;
   }
 
   Future<AuthResponse> signInWithGoogle() async {
@@ -89,6 +190,13 @@ class AuthRepository {
         );
       }
 
+      if (kIsWeb) {
+        throw Exception(
+          'On web, use the Google button below (GIS). '
+          'Programmatic authenticate() is not supported in browsers.',
+        );
+      }
+
       await _ensureGoogleInitialized();
 
       _log('Calling GoogleSignIn.authenticate()...');
@@ -97,31 +205,7 @@ class AuthRepository {
         'authenticate() ok. email=${account.email}, '
         'id=${account.id}, displayName=${account.displayName}',
       );
-
-      final auth = account.authentication;
-      final idToken = auth.idToken;
-      _log(
-        'idToken present=${idToken != null} '
-        'length=${idToken?.length ?? 0}',
-      );
-
-      if (idToken == null) {
-        throw Exception(
-          'Google sign-in failed: missing idToken. '
-          'Check GOOGLE_WEB_CLIENT_ID and Supabase Google provider settings.',
-        );
-      }
-
-      _log('Calling Supabase signInWithIdToken(provider=google)...');
-      final response = await _client.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-      );
-      _log(
-        'Supabase signInWithIdToken ok. '
-        'userId=${response.user?.id}, email=${response.user?.email}',
-      );
-      return response;
+      return _completeGoogleWithAccount(account);
     } on GoogleSignInException catch (e, st) {
       _log('GoogleSignInException code=${e.code} description=${e.description}');
       _log('Stack: $st');
@@ -276,6 +360,43 @@ class AuthRepository {
     return withCacheBust;
   }
 
+  /// Sends a password-reset email. [redirectTo] must be allow-listed in
+  /// Supabase Auth → URL Configuration.
+  Future<void> sendPasswordResetEmail(String email) async {
+    final redirectTo = kIsWeb ? _webPasswordResetRedirectTo() : null;
+    _log('sendPasswordResetEmail redirectTo=$redirectTo');
+    await _client.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo: redirectTo,
+    );
+  }
+
+  /// Prefer [AppConfig.webBasePath]; fall back to detecting GitHub Pages path.
+  static String _webPasswordResetRedirectTo() {
+    final configured = AppConfig.webBasePath.trim();
+    final basePath = configured.isNotEmpty
+        ? (configured.startsWith('/') ? configured : '/$configured')
+            .replaceAll(RegExp(r'/+$'), '')
+        : _inferredWebBasePath();
+    return '${Uri.base.origin}$basePath/reset-password';
+  }
+
+  static String _inferredWebBasePath() {
+    final segments = Uri.base.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty) return '';
+    // Project Pages: /wellin_expense_tracker/<route>
+    if (segments.first == 'wellin_expense_tracker') {
+      return '/wellin_expense_tracker';
+    }
+    return '';
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
+  }
+
   Future<void> signOut() async {
     try {
       if (_googleInitialized) {
@@ -283,5 +404,46 @@ class AuthRepository {
       }
     } catch (_) {}
     await _client.auth.signOut();
+  }
+
+  /// Maps Auth/API exceptions to short user-facing copy.
+  static String friendlyAuthError(Object error) {
+    if (error is AuthException) {
+      final code = error.code?.toLowerCase() ?? '';
+      final message = error.message.toLowerCase();
+      if (code == 'invalid_credentials' ||
+          message.contains('invalid login credentials')) {
+        return 'Incorrect email or password. '
+            'If you signed up with Google, use Continue with Google, '
+            'or tap Forgot password to set one.';
+      }
+      if (code == 'email_not_confirmed' ||
+          message.contains('email not confirmed')) {
+        return 'Confirm your email before signing in.';
+      }
+      if (code == 'user_not_found' || message.contains('user not found')) {
+        return 'No account found for that email.';
+      }
+      if (message.contains('rate limit') || code.contains('rate')) {
+        return 'Too many attempts. Try again in a few minutes.';
+      }
+      return error.message;
+    }
+    final raw = error.toString();
+    if (raw.startsWith('Exception: ')) {
+      return raw.substring('Exception: '.length);
+    }
+    if (raw.contains('Invalid login credentials')) {
+      return 'Incorrect email or password. '
+          'If you signed up with Google, use Continue with Google, '
+          'or tap Forgot password to set one.';
+    }
+    return raw;
+  }
+
+  Future<void> dispose() async {
+    await _webGoogleSub?.cancel();
+    _webGoogleSub = null;
+    _webGoogleListenerAttached = false;
   }
 }

@@ -10,6 +10,7 @@ import '../features/auth/presentation/login_page.dart';
 import '../features/auth/presentation/more_page.dart';
 import '../features/auth/presentation/pending_page.dart';
 import '../features/auth/presentation/register_page.dart';
+import '../features/auth/presentation/reset_password_page.dart';
 import '../features/auth/presentation/security_page.dart';
 import '../features/auth/presentation/shell_scaffold.dart';
 import '../features/auth/presentation/unlock_page.dart';
@@ -53,11 +54,17 @@ GoRouter createRouter(AuthBloc authBloc) {
     redirect: (context, state) {
       final auth = authBloc.state;
       final loc = state.matchedLocation;
-      final isAuthRoute =
-          loc == '/login' || loc == '/register' || loc == '/complete-profile';
+      final isAuthRoute = loc == '/login' ||
+          loc == '/register' ||
+          loc == '/complete-profile' ||
+          loc == '/reset-password';
 
       if (auth.status == AuthStatus.unknown) {
         return null;
+      }
+
+      if (auth.status == AuthStatus.passwordRecovery) {
+        return loc == '/reset-password' ? null : '/reset-password';
       }
 
       if (auth.status == AuthStatus.unauthenticated ||
@@ -82,7 +89,8 @@ GoRouter createRouter(AuthBloc authBloc) {
         if (isAuthRoute ||
             loc == '/pending' ||
             loc == '/unlock' ||
-            loc == '/complete-profile') {
+            loc == '/complete-profile' ||
+            loc == '/reset-password') {
           return '/home';
         }
       }
@@ -94,6 +102,10 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterPage(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordPage(),
       ),
       GoRoute(
         path: '/complete-profile',

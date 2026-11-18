@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -23,6 +24,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     on<AuthLoginRequested>(_onLogin);
     on<AuthRegisterRequested>(_onRegister);
     on<AuthGoogleRequested>(_onGoogle);
+    on<AuthGoogleWebStarted>(_onGoogleWebStarted);
+    on<AuthGoogleWebFailed>(_onGoogleWebFailed);
+    on<AuthPasswordResetEmailRequested>(_onPasswordResetEmail);
+    on<AuthPasswordUpdateRequested>(_onPasswordUpdate);
     on<AuthCompleteProfileRequested>(_onCompleteProfile);
     on<AuthLogoutRequested>(_onLogout);
     on<AuthUnlocked>(_onUnlocked);
@@ -39,15 +44,43 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
   /// Once unlocked, stay unlocked until app backgrounds or logout.
   bool _unlockedForSession = false;
 
+  /// True after the user opens a password-reset email link.
+  bool _passwordRecovery = false;
+
   Future<void> _onStarted(
     AuthStarted event,
     Emitter<AuthBlocState> emit,
   ) async {
     await _sub?.cancel();
     _sub = _authRepository.authStateChanges.listen((data) {
-      add(AuthSessionChanged(data.session));
+      add(AuthSessionChanged(data.session, event: data.event));
     });
+    if (kIsWeb) {
+      await _authRepository.attachWebGoogleSignInListener(
+        onSignInStarted: () => add(const AuthGoogleWebStarted()),
+        onError: (error) {
+          add(AuthGoogleWebFailed(AuthRepository.friendlyAuthError(error)));
+        },
+      );
+    }
     add(AuthSessionChanged(_authRepository.currentSession));
+  }
+
+  Future<void> _onGoogleWebStarted(
+    AuthGoogleWebStarted event,
+    Emitter<AuthBlocState> emit,
+  ) async {
+    emit(state.copyWith(status: AuthStatus.loading, errorMessage: null));
+  }
+
+  Future<void> _onGoogleWebFailed(
+    AuthGoogleWebFailed event,
+    Emitter<AuthBlocState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: AuthStatus.failure,
+      errorMessage: event.message,
+    ));
   }
 
   Future<void> _onSessionChanged(
@@ -57,7 +90,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     final session = event.session;
     if (session == null) {
       _unlockedForSession = false;
+      _passwordRecovery = false;
       emit(const AuthBlocState.unauthenticated());
+      return;
+    }
+
+    if (event.event == AuthChangeEvent.passwordRecovery) {
+      _passwordRecovery = true;
+      emit(AuthBlocState.passwordRecovery(session.user));
+      return;
+    }
+
+    if (_passwordRecovery) {
+      emit(AuthBlocState.passwordRecovery(session.user));
       return;
     }
 
@@ -110,7 +155,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     AuthLoginRequested event,
     Emitter<AuthBlocState> emit,
   ) async {
-    emit(state.copyWith(status: AuthStatus.loading, errorMessage: null));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      errorMessage: null,
+      infoMessage: null,
+    ));
     try {
       await _authRepository.signInWithEmail(
         email: event.email,
@@ -119,7 +168,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     } catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
-        errorMessage: e.toString(),
+        errorMessage: AuthRepository.friendlyAuthError(e),
       ));
     }
   }
@@ -128,7 +177,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     AuthRegisterRequested event,
     Emitter<AuthBlocState> emit,
   ) async {
-    emit(state.copyWith(status: AuthStatus.loading, errorMessage: null));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      errorMessage: null,
+      infoMessage: null,
+    ));
     try {
       await _authRepository.signUpWithEmail(
         name: event.name,
@@ -139,7 +192,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     } catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
-        errorMessage: e.toString(),
+        errorMessage: AuthRepository.friendlyAuthError(e),
       ));
     }
   }
@@ -150,7 +203,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
   ) async {
     // ignore: avoid_print
     print('[AuthBloc] Google sign-in requested');
-    emit(state.copyWith(status: AuthStatus.loading, errorMessage: null));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      errorMessage: null,
+      infoMessage: null,
+    ));
     try {
       await _authRepository.signInWithGoogle();
       // ignore: avoid_print
@@ -160,13 +217,61 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
       print('[AuthBloc] Google sign-in error: $e');
       // ignore: avoid_print
       print('[AuthBloc] Stack: $st');
-      final raw = e.toString();
-      final message = raw.startsWith('Exception: ')
-          ? raw.substring('Exception: '.length)
-          : raw;
       emit(state.copyWith(
         status: AuthStatus.failure,
-        errorMessage: message,
+        errorMessage: AuthRepository.friendlyAuthError(e),
+      ));
+    }
+  }
+
+  Future<void> _onPasswordResetEmail(
+    AuthPasswordResetEmailRequested event,
+    Emitter<AuthBlocState> emit,
+  ) async {
+    // Stay on unauthenticated — do not flip to loading (that remounts login
+    // under an open dialog and causes GlobalKey / build-scope errors).
+    emit(state.copyWith(
+      status: AuthStatus.unauthenticated,
+      errorMessage: null,
+      infoMessage: null,
+    ));
+    try {
+      await _authRepository.sendPasswordResetEmail(event.email);
+      emit(state.copyWith(
+        status: AuthStatus.unauthenticated,
+        infoMessage:
+            'If an account exists for that email, we sent a reset link. '
+            'Check your inbox.',
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        status: AuthStatus.failure,
+        errorMessage: AuthRepository.friendlyAuthError(e),
+      ));
+    }
+  }
+
+  Future<void> _onPasswordUpdate(
+    AuthPasswordUpdateRequested event,
+    Emitter<AuthBlocState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      errorMessage: null,
+      infoMessage: null,
+    ));
+    try {
+      await _authRepository.updatePassword(event.password);
+      _passwordRecovery = false;
+      _unlockedForSession = true;
+      add(AuthSessionChanged(
+        _authRepository.currentSession,
+        event: AuthChangeEvent.userUpdated,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        status: AuthStatus.passwordRecovery,
+        errorMessage: AuthRepository.friendlyAuthError(e),
       ));
     }
   }
@@ -192,6 +297,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthBlocState> {
     Emitter<AuthBlocState> emit,
   ) async {
     _unlockedForSession = false;
+    _passwordRecovery = false;
     if (event.clearLock) {
       await _lockService.clearAllLockSettings();
     }

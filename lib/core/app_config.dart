@@ -36,6 +36,13 @@ class AppConfig {
         '516820881204-h62uq4g8o6mue9thknk2kocrn8n2kvts.apps.googleusercontent.com',
   );
 
+  /// Web base path without trailing slash (empty for `/`).
+  /// GitHub Pages project site: `/wellin_expense_tracker`.
+  static const webBasePath = String.fromEnvironment(
+    'WEB_BASE_PATH',
+    defaultValue: '',
+  );
+
   static bool get isConfigured =>
       supabaseUrl.isNotEmpty &&
       supabaseAnonKey.isNotEmpty &&

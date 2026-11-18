@@ -8,6 +8,7 @@ enum AuthStatus {
   pending,
   locked,
   authenticated,
+  passwordRecovery,
   failure,
 }
 
@@ -18,6 +19,7 @@ class AuthBlocState extends Equatable {
     this.user,
     this.unlocked = false,
     this.errorMessage,
+    this.infoMessage,
   });
 
   const AuthBlocState.unknown() : this(status: AuthStatus.unknown);
@@ -41,6 +43,9 @@ class AuthBlocState extends Equatable {
           unlocked: unlocked,
         );
 
+  const AuthBlocState.passwordRecovery(User user)
+      : this(status: AuthStatus.passwordRecovery, user: user);
+
   const AuthBlocState.failure(String message)
       : this(status: AuthStatus.failure, errorMessage: message);
 
@@ -49,6 +54,7 @@ class AuthBlocState extends Equatable {
   final User? user;
   final bool unlocked;
   final String? errorMessage;
+  final String? infoMessage;
 
   bool get isAuthenticated =>
       status == AuthStatus.authenticated && unlocked && profile != null;
@@ -59,6 +65,7 @@ class AuthBlocState extends Equatable {
     User? user,
     bool? unlocked,
     String? errorMessage,
+    String? infoMessage,
   }) {
     return AuthBlocState(
       status: status ?? this.status,
@@ -66,9 +73,11 @@ class AuthBlocState extends Equatable {
       user: user ?? this.user,
       unlocked: unlocked ?? this.unlocked,
       errorMessage: errorMessage,
+      infoMessage: infoMessage,
     );
   }
 
   @override
-  List<Object?> get props => [status, profile, user, unlocked, errorMessage];
+  List<Object?> get props =>
+      [status, profile, user, unlocked, errorMessage, infoMessage];
 }

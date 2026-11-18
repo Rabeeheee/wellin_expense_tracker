@@ -1,10 +1,9 @@
 import 'dart:developer' as developer;
-import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/app_colors.dart';
@@ -142,34 +141,28 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
     setState(() => _exporting = true);
     try {
-      final bytes = buildTransactionsExcelBytes(items);
+      final bytes = Uint8List.fromList(buildTransactionsExcelBytes(items));
       _logExport('excel built period="$period" bytes=${bytes.length}');
 
-      final dir = await getTemporaryDirectory();
       final safe = period.replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '_');
-      final path = '${dir.path}/wellin_$safe.xls';
-      final file = File(path);
-      await file.writeAsBytes(bytes, flush: true);
-      final exists = await file.exists();
-      final size = exists ? await file.length() : 0;
-      _logExport('file written path=$path exists=$exists bytes=$size');
-
+      final fileName = 'wellin_$safe.xls';
       final origin = _shareOrigin();
-      _logExport('shareOrigin=$origin');
+      _logExport('shareOrigin=$origin kIsWeb=$kIsWeb');
 
       try {
         final result = await SharePlus.instance.share(
           ShareParams(
             files: [
-              XFile(
-                path,
+              XFile.fromData(
+                bytes,
                 mimeType: 'application/vnd.ms-excel',
-                name: 'wellin_$safe.xls',
+                name: fileName,
               ),
             ],
             subject: 'Wellin Export $period',
             title: 'Wellin Export $period',
             sharePositionOrigin: origin,
+            downloadFallbackEnabled: true,
           ),
         );
         _logExport(

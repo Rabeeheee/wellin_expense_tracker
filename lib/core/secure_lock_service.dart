@@ -31,6 +31,7 @@ class SecureLockService {
       await isPinEnabled || await isBiometricEnabled;
 
   Future<bool> canCheckBiometrics() async {
+    if (kIsWeb) return false;
     try {
       final supported = await _localAuth.isDeviceSupported();
       if (!supported) return false;
@@ -80,8 +81,11 @@ class SecureLockService {
 
   /// Returns null on success, or an error message on failure / cancel.
   Future<String?> authenticateBiometric({
-    String reason = 'Unlock Expense Tracker',
+    String reason = 'Unlock Wellin',
   }) async {
+    if (kIsWeb) {
+      return 'Biometrics are not available in the browser. Use PIN instead.';
+    }
     try {
       final ok = await _localAuth.authenticate(
         localizedReason: reason,

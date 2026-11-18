@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../../core/secure_lock_service.dart';
 import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/wellin_logo.dart';
 import '../bloc/auth_bloc.dart';
+import 'google_gis_button.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -44,6 +46,20 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  Future<void> _showForgotPassword(BuildContext context) async {
+    final email = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ForgotPasswordDialog(
+        initialEmail: _email.text.trim(),
+      ),
+    );
+    if (email == null || !email.contains('@') || !context.mounted) return;
+    context.read<AuthBloc>().add(
+          AuthPasswordResetEmailRequested(email: email),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     ThemeRebuildScope.depend(context);
@@ -56,6 +72,15 @@ class _LoginPageState extends State<LoginPage> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(state.errorMessage!),
+                  duration: const Duration(seconds: 6),
+                ),
+              );
+            }
+            if (state.infoMessage != null &&
+                state.infoMessage!.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.infoMessage!),
                   duration: const Duration(seconds: 6),
                 ),
               );
@@ -147,7 +172,16 @@ class _LoginPageState extends State<LoginPage> {
                               ? null
                               : 'Min 6 characters',
                         ),
-                        const SizedBox(height: 20),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: loading
+                                ? null
+                                : () => _showForgotPassword(context),
+                            child: const Text('Forgot password?'),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         ElevatedButton(
                           onPressed: loading
                               ? null
@@ -170,15 +204,24 @@ class _LoginPageState extends State<LoginPage> {
                               : const Text('Sign in'),
                         ),
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: loading
-                              ? null
-                              : () => context
-                                  .read<AuthBloc>()
-                                  .add(const AuthGoogleRequested()),
-                          icon: const Icon(Icons.g_mobiledata, size: 28),
-                          label: const Text('Continue With Google'),
-                        ),
+                        if (kIsWeb)
+                          IgnorePointer(
+                            ignoring: loading,
+                            child: Opacity(
+                              opacity: loading ? 0.5 : 1,
+                              child: googleGisSignInButton(),
+                            ),
+                          )
+                        else
+                          OutlinedButton.icon(
+                            onPressed: loading
+                                ? null
+                                : () => context
+                                    .read<AuthBloc>()
+                                    .add(const AuthGoogleRequested()),
+                            icon: const Icon(Icons.g_mobiledata, size: 28),
+                            label: const Text('Continue With Google'),
+                          ),
                         const SizedBox(height: 16),
                         TextButton(
                           onPressed: () => context.go('/register'),
@@ -193,6 +236,66 @@ class _LoginPageState extends State<LoginPage> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Owns its [TextEditingController] for the dialog lifetime so it is not
+/// disposed while the route is still animating out.
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog({required this.initialEmail});
+
+  final String initialEmail;
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final email = _controller.text.trim();
+    if (!email.contains('@')) return;
+    Navigator.of(context).pop(email);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reset password'),
+      content: TextField(
+        controller: _controller,
+        keyboardType: TextInputType.emailAddress,
+        autofocus: true,
+        onSubmitted: (_) => _submit(),
+        decoration: const InputDecoration(
+          labelText: 'Email',
+          hintText: 'you@example.com',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Send link'),
+        ),
+      ],
     );
   }
 }

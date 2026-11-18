@@ -104,7 +104,7 @@ class _SecurityPageState extends State<SecurityPage> {
               subtitle: Text(
                 _canBiometric
                     ? 'Fingerprint or Face ID'
-                    : 'Not available on this device',
+                    : 'Not available here (use PIN on web)',
               ),
               value: _biometricEnabled,
               onChanged: !_canBiometric
