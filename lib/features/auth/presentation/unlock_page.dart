@@ -87,7 +87,7 @@ class _UnlockPageState extends State<UnlockPage> {
   }
 
   Future<void> _submitPin() async {
-    if (_pin.text.length < 4) return;
+    if (_pin.text.length != 6) return;
     final lock = context.read<SecureLockService>();
     final ok = await lock.verifyPin(_pin.text);
     if (!mounted) return;
@@ -194,7 +194,7 @@ class _UnlockPageState extends State<UnlockPage> {
                     SizedBox(height: 6),
                     Text(
                       _usePin
-                          ? 'Enter your 4–6 digit app PIN'
+                          ? 'Enter your 6-digit app PIN'
                           : 'Confirm it’s you to continue',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -269,7 +269,7 @@ class _UnlockPageState extends State<UnlockPage> {
                       SizedBox(height: 18),
                       FilledButton(
                         onPressed:
-                            _pin.text.length >= 4 ? _submitPin : null,
+                            _pin.text.length == 6 ? _submitPin : null,
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: AppColors.fabIcon,

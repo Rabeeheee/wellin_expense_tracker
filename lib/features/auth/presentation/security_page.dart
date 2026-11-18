@@ -48,13 +48,22 @@ class _SecurityPageState extends State<SecurityPage> {
   }
 
   Future<void> _savePin() async {
-    if (_pin.text.length < 4 || _pin.text != _confirm.text) {
+    final pin = _pin.text.trim();
+    final confirm = _confirm.text.trim();
+    final digitsOnly = RegExp(r'^\d{6}$');
+    if (!digitsOnly.hasMatch(pin)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN must be 4–6 digits and match')),
+        const SnackBar(content: Text('PIN must be exactly 6 digits')),
       );
       return;
     }
-    await context.read<SecureLockService>().setPin(_pin.text);
+    if (pin != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PIN and confirmation must match')),
+      );
+      return;
+    }
+    await context.read<SecureLockService>().setPin(pin);
     _pin.clear();
     _confirm.clear();
     await _load();
@@ -164,7 +173,7 @@ class _SecurityPageState extends State<SecurityPage> {
                     ),
                   ),
                   title: const Text('App PIN'),
-                  subtitle: const Text('4–6 digit PIN for this device'),
+                  subtitle: const Text('6-digit PIN for this device'),
                   value: _pinEnabled,
                   onChanged: (v) async {
                     if (!v) {
