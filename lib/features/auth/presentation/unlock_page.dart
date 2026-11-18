@@ -53,7 +53,7 @@ class _UnlockPageState extends State<UnlockPage> {
       await _tryBiometric();
     } else if (pin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _pinFocus.requestFocus();
+        if (mounted) _openPinKeyboard();
       });
     }
   }
@@ -64,7 +64,7 @@ class _UnlockPageState extends State<UnlockPage> {
       if (_pinEnabled) {
         setState(() => _usePin = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _pinFocus.requestFocus();
+          if (mounted) _openPinKeyboard();
         });
       }
       return;
@@ -81,7 +81,7 @@ class _UnlockPageState extends State<UnlockPage> {
     });
     if (_pinEnabled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _pinFocus.requestFocus();
+        if (mounted) _openPinKeyboard();
       });
     }
   }
@@ -106,13 +106,30 @@ class _UnlockPageState extends State<UnlockPage> {
           'Incorrect PIN · ${SecureLockService.maxPinAttempts - fails} left';
       _pin.clear();
     });
-    _pinFocus.requestFocus();
+    _openPinKeyboard();
   }
 
   void _onPinChanged(String value) {
     setState(() => _error = null);
     if (value.length == 6) {
       _submitPin();
+    }
+  }
+
+  /// Re-open the soft keyboard even if the field still has focus
+  /// (closing the keyboard does not clear focus on web/mobile).
+  void _openPinKeyboard() {
+    void show() {
+      if (!mounted) return;
+      _pinFocus.requestFocus();
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    }
+
+    if (_pinFocus.hasFocus) {
+      _pinFocus.unfocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) => show());
+    } else {
+      show();
     }
   }
 
@@ -219,7 +236,7 @@ class _UnlockPageState extends State<UnlockPage> {
                       )
                     else ...[
                       GestureDetector(
-                        onTap: () => _pinFocus.requestFocus(),
+                        onTap: _openPinKeyboard,
                         behavior: HitTestBehavior.opaque,
                         child: Column(
                           children: [
@@ -228,28 +245,31 @@ class _UnlockPageState extends State<UnlockPage> {
                               maxLength: 6,
                               hasError: _error != null,
                             ),
+                            // Hidden input: taps hit the GestureDetector above;
+                            // keep it in the tree so focus/keyboard still work.
                             SizedBox(
                               width: 1,
                               height: 1,
-                              child: Opacity(
-                                opacity: 0,
-                                child: TextField(
-                                  controller: _pin,
-                                  focusNode: _pinFocus,
-                                  autofocus: true,
-                                  obscureText: true,
-                                  keyboardType: TextInputType.number,
-                                  maxLength: 6,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                  ],
-                                  decoration: const InputDecoration(
-                                    counterText: '',
-                                    border: InputBorder.none,
-                                  ),
-                                  onChanged: _onPinChanged,
-                                  onSubmitted: (_) => _submitPin(),
+                              child: TextField(
+                                controller: _pin,
+                                focusNode: _pinFocus,
+                                autofocus: true,
+                                obscureText: true,
+                                showCursor: false,
+                                keyboardType: TextInputType.number,
+                                maxLength: 6,
+                                enableInteractiveSelection: false,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                  counterText: '',
+                                  border: InputBorder.none,
+                                  isCollapsed: true,
                                 ),
+                                style: const TextStyle(color: Colors.transparent),
+                                onChanged: _onPinChanged,
+                                onSubmitted: (_) => _submitPin(),
                               ),
                             ),
                           ],
@@ -305,7 +325,7 @@ class _UnlockPageState extends State<UnlockPage> {
                           });
                           if (_usePin) {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) _pinFocus.requestFocus();
+                              if (mounted) _openPinKeyboard();
                             });
                           } else {
                             _tryBiometric();
